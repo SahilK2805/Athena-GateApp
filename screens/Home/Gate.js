@@ -17,7 +17,9 @@ const Gate = ({ route }) => {
     const { title,body, gate_id, islocked,status,geolocked,lat,lon } = route.params;
     const [open, setOpen] = React.useState(status === '1' ? false : true);
     const [Locked, setLocked] = React.useState(islocked);
-    const [geoSwitchOn, setgeoSwitchOn] = React.useState(geolocked);
+    const [geoSwitchOn, setgeoSwitchOn] = React.useState(true);
+    const [gateStatusUpdated, setGateStatusUpdated] = useState(false);
+
 
     const [InRange, setInRange] = React.useState(false);
     
@@ -36,20 +38,7 @@ const Gate = ({ route }) => {
         }
     };
 
-    const onToggleSwitch = () => {
-        try{
-        client.post(`/gate/geo/${gate_id}`, {geolocked:!geoSwitchOn}).catch((error) => {
-            Alert.alert('Error:', error.message);
-        }).then((response) => {
-            console.log(response.data);
-            }
-        );
-        }catch(error){
-            Alert.alert('Error:', error.message);
-        }
-    setgeoSwitchOn(!geoSwitchOn);
-    console.log((geoSwitchOn ? InRange: true ), InRange, geoSwitchOn);
-    };
+
 
     const connectToMQTT = () => {
         if (!isConnect) {
@@ -116,33 +105,34 @@ const Gate = ({ route }) => {
 
     useEffect(() => {
         connectToMQTT();
-
+    
         mqttClient.onMessageArrived = (message) => {
             console.log('Message Arrived: ', message.payloadString);
             let gateStatus = message.payloadString;
-
+    
             if (gateStatus === 'opened') {
                 console.log('Gate is Opened');
                 setOpen(true);
-                client.post(`/gate/${gate_id}`, {status: '2'});
+                client.post(`/gate/${gate_id}`, { status: '2' });
+                setGateStatusUpdated(true); // Update state when gate is opened
             }
             if (gateStatus === 'closed') {
                 console.log('Gate is Closed');
                 setOpen(false);
-                client.post(`/gate/${gate_id}`, {status: '1'});
+                client.post(`/gate/${gate_id}`, { status: '1' });
             }
-            if (gateStatus === 'locked'){
+            if (gateStatus === 'locked') {
                 console.log('Gate is being Locked');
-                client.post(`/gate/lock/${gate_id}`, {locked:true}).catch((error) => {
+                client.post(`/gate/lock/${gate_id}`, { locked: true }).catch((error) => {
                     console.log(error);
                 }).then((response) => {
                     setLocked(true);
                     Alert.alert('Success', 'Gate Locked');
                 });
             }
-            if (gateStatus === 'unlocked'){
+            if (gateStatus === 'unlocked') {
                 console.log('Gate is Unlocked');
-                client.post(`/gate/lock/${gate_id}`, {locked:false}).catch
+                client.post(`/gate/lock/${gate_id}`, { locked: false }).catch
                 ((error) => {
                     console.log(error);
                 }).then((response) => {;
@@ -152,6 +142,12 @@ const Gate = ({ route }) => {
             }
         };
     
+        // Show alert when the gate is opened after it is updated
+        if (gateStatusUpdated) {
+            Alert.alert('Success', 'Gate Opened');
+            setGateStatusUpdated(false); // Reset the flag after showing the alert
+        }
+    
         mqttClient.onConnectionLost = (responseObject) => {
             console.log('Connection Lost: ', responseObject.errorMessage);
             setIsConnect(false);
@@ -160,43 +156,37 @@ const Gate = ({ route }) => {
         return () => {
             if (isConnect) {
                 try {
-                console.log('Disconnecting from MQTT');
-                mqttClient.disconnect();
-                setIsConnect(false);
-                }
-                catch (error) {
+                    console.log('Disconnecting from MQTT');
+                    mqttClient.disconnect();
+                    setIsConnect(false);
+                } catch (error) {
                     console.log('Error:', error.message);
                 }
             }
         };
+    }, [gateStatusUpdated]); // Depend on gateStatusUpdated to trigger alert when needed
     
-    }, []); // Ensure dependencies are correctly managed
 
     const PartialopenGate = () => {
-        if (isConnect){
+        if (isConnect) {
             const message = new Paho.Message('partial_open');
             message.destinationName = `gate/${body}`;
             mqttClient.send(message);
-
-            Alert.alert('Success', 'Gate Opened');
-        }
-        else{
+        } else {
             Alert.alert('Error', 'MQTT Client is not connected');
         }
     };
-
+    
     const FullopenGate = () => {
-        if (isConnect){
+        if (isConnect) {
             const message = new Paho.Message('full_open');
             message.destinationName = `gate/${body}`;
             mqttClient.send(message);
-            
-            Alert.alert('Success', 'Gate Opened');
-        }
-        else{
+        } else {
             Alert.alert('Error', 'MQTT Client is not connected');
         }
     };
+    
 
     const Lock = () => {
         if (isConnect){
@@ -266,8 +256,7 @@ useEffect(() => {
     return (   
     <View style={styles.container}>
         <Text  style= {styles.text}>Gate: {body}</Text>
-        <Text>GeoLock</Text>
-        <Text> <Switch value={geoSwitchOn} onValueChange={onToggleSwitch} disabled={!mreach} /> </Text>
+        
         {/* <Button mode="contained" onPress={getPermissions} style={styles.button} labelStyle={styles.buttonText}>
             Get Location
         </Button> */}
