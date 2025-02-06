@@ -34,6 +34,7 @@ const Admin = () => {
   const ShareDevice = () => {
     navigation.navigate('ShareDevice'); 
   };
+  
   return (
     <View style={styles.container}>
       { authState.type === "0" &&
@@ -112,3 +113,4 @@ const styles = StyleSheet.create({
     
   },
 });
+
