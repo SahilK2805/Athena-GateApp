@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Alert, TextInput } from 'react-native';
+import { View, StyleSheet, Alert, TextInput, Switch } from 'react-native';
 import { Text, Button, Snackbar } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import client from '../../connection/connectApi.js';
@@ -21,6 +21,12 @@ const AddDevice = () => {
   const [gates, setGates] = useState("");
   const { authState } = useAuth();
   const navigation = useNavigation();
+
+  // Add new permission states for each toggle
+  const [geoPermission, setGeoPermission] = useState(true); // true means geofencing is ON
+  const [fullOpenPermission, setFullOpenPermission] = useState(false);
+  const [keepOpenPermission, setKeepOpenPermission] = useState(false);
+  const [dndPermission, setDndPermission] = useState(false);
 
   const getGates = async () => {
     let key = authState.user_id;
@@ -69,20 +75,29 @@ const AddDevice = () => {
       );
 
       if (response) {
+        // Create unique permission key for this specific user-gate combination
         const permissionKey = `permission_${userid}_${subKey[0][2]}`;
-        console.log("Storing permission:", permission, "with key:", permissionKey);
         
+        // Create permissions object for this specific gate
+        const permissions = {
+          geolocation: geoPermission,
+          fullOpen: fullOpenPermission,
+          keepOpen: keepOpenPermission,
+          dnd: dndPermission
+        };
+
         try {
-          // Clear any existing permission first
+          // Clear any existing permissions for this user-gate combination
           await AsyncStorage.removeItem(permissionKey);
-          // Store new permission
-          await AsyncStorage.setItem(permissionKey, permission);
           
-          // Verify the stored value
+          // Store new permissions
+          await AsyncStorage.setItem(permissionKey, JSON.stringify(permissions));
+          
+          // Verify storage
           const storedValue = await AsyncStorage.getItem(permissionKey);
-          console.log("Verified stored permission:", storedValue);
+          console.log("Stored permissions for gate", subKey[0][2], ":", storedValue);
           
-          if (storedValue !== permission) {
+          if (!storedValue) {
             throw new Error("Permission storage verification failed");
           }
           
@@ -92,7 +107,7 @@ const AddDevice = () => {
           setvisibleForm(false);
         } catch (storageError) {
           console.error("Permission storage error:", storageError);
-          seterrorMsg('Error saving permission');
+          seterrorMsg('Error saving permissions');
           setVisible(true);
         }
       }
@@ -144,7 +159,7 @@ const AddDevice = () => {
         </View>
       )}
       {visibleForm && (
-        <View>
+        <View style={styles.formContainer}>
           <Text style={styles.text}>Select the gate to be allocated to the user :</Text>
           <View style={{ padding: 15, marginBottom: -15 }}>
             <SelectList
@@ -153,20 +168,40 @@ const AddDevice = () => {
               save="value"
             />
           </View>
-          {/* New dropdown for permission selection */}
-          <Text style={styles.text}>Select permission level:</Text>
-          <View style={{ padding: 15, marginBottom: -15 }}>
-            <SelectList
-              setSelected={(val) => {
-                console.log("Permission selected:", val); // Debug log
-                setPermission(val);
-              }}
-              data={[
-                { key: "1", value: "Give Permission" },
-                { key: "2", value: "Dont give permission" }
-              ]}
-              save="value"
-            />
+          {/* Replace dropdown with toggle buttons */}
+          <View style={styles.toggleContainer}>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Geolocation</Text>
+              <Switch
+                value={geoPermission}
+                onValueChange={setGeoPermission}
+                color="#991219"
+              />
+            </View>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Full Open</Text>
+              <Switch
+                value={fullOpenPermission}
+                onValueChange={setFullOpenPermission}
+                color="#991219"
+              />
+            </View>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>Keep Open</Text>
+              <Switch
+                value={keepOpenPermission}
+                onValueChange={setKeepOpenPermission}
+                color="#991219"
+              />
+            </View>
+            <View style={styles.toggleRow}>
+              <Text style={styles.toggleLabel}>DND</Text>
+              <Switch
+                value={dndPermission}
+                onValueChange={setDndPermission}
+                color="#991219"
+              />
+            </View>
           </View>
           <Button mode="contained" onPress={handleAddDevice} style={styles.button} labelStyle={styles.buttonText}>
             Allocate Gate
@@ -227,7 +262,27 @@ const styles = StyleSheet.create({
     marginBottom: 7,
     marginLeft: 3,
     fontWeight: "700"
-  }
+  },
+  formContainer: {
+    padding: 16,
+  },
+  toggleContainer: {
+    marginVertical: 10,
+    width: '100%',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  toggleLabel: {
+    fontSize: 16,
+    color: '#333',
+  },
 });
 
 export default AddDevice;

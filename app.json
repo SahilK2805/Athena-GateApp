@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "Athena",
-    "slug": "Athena",
-    "version": "3.0.0",
+    "owner": "psk13579",
+    "name": "Athena Gate",
+    "slug": "athena-gate",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -20,9 +21,15 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#FFFFFF"
       },
-      "package": "com.zen003.AthenaUser"
+      "package": "com.athena.gate",
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "INTERNET",
+        "WAKE_LOCK"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

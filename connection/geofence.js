@@ -16,7 +16,7 @@ function haversine(lat1, lon1, lat2, lon2) {
     return R * c; // Distance in meters
 }
 
-function isWithinGeofence(userLat, userLon, deviceLat, deviceLon, minDistance = 0, maxDistance = 500) {
+function isWithinGeofence(userLat, userLon, deviceLat, deviceLon, minDistance = 0, maxDistance = 10) {
     const distance = haversine(userLat, userLon, deviceLat, deviceLon);
     return minDistance <= distance && distance <= maxDistance;
 }

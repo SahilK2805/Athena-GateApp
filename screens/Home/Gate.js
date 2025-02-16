@@ -17,7 +17,7 @@ const mqttClient = new Paho.Client(
 const Gate = ({ route }) => {
     const [isConnect, setIsConnect] = useState(false);
     const { title, body, gate_id, islocked, status, geolocked, lat, lon } = route.params;
-    const [permission, setPermission] = useState("Dont give permission");
+    const [permission, setPermission] = useState("Give Permission");
     const { authState } = useAuth();
     const [open, setOpen] = useState(status === '1' ? false : true);
     const [Locked, setLocked] = useState(islocked);
@@ -27,24 +27,45 @@ const Gate = ({ route }) => {
     const [reach, setReach] = useState(false);
     const [mreach, setMReach] = useState(false);
     const [message, setMessage] = useState('');
+    const [alertShown, setAlertShown] = useState(false);
+    const [partialAlertShown, setPartialAlertShown] = useState(false);
+    const [hasError, setHasError] = useState(false);
+    const [permissions, setPermissions] = useState({
+        geolocation: true,
+        fullOpen: true,
+        keepOpen: true,
+        dnd: true
+    });
 
     useEffect(() => {
-        const getPermission = async () => {
+        console.log("Permissions updated:", permissions);
+        console.log("Open state:", open);
+        console.log("Reach state:", reach);
+        console.log("Locked state:", Locked);
+    }, [permissions, open, reach, Locked]);
+
+    useEffect(() => {
+        const getPermissions = async () => {
             try {
                 if (authState && authState.user_id) {
                     const permissionKey = `permission_${authState.user_id}_${gate_id}`;
-                    const storedPermission = await AsyncStorage.getItem(permissionKey);
+                    console.log("Checking permissions with key:", permissionKey);
                     
-                    if (storedPermission) {
-                        setPermission(storedPermission.trim());
+                    const storedPermissions = await AsyncStorage.getItem(permissionKey);
+                    console.log("Raw stored permissions:", storedPermissions);
+                    
+                    if (storedPermissions) {
+                        const parsedPermissions = JSON.parse(storedPermissions);
+                        console.log("Setting permissions for gate", gate_id, ":", parsedPermissions);
+                        setPermissions(parsedPermissions);
                     }
                 }
             } catch (error) {
-                console.error("Error in getPermission:", error);
+                console.error("Error getting permissions:", error);
             }
         };
 
-        getPermission();
+        getPermissions();
     }, [authState, gate_id]);
 
     const handleSensorError = (errorType) => {
@@ -59,10 +80,14 @@ const Gate = ({ route }) => {
         };
 
         if (errorMessages[errorType]) {
+            setHasError(true);
             Alert.alert('Sensor Error', errorMessages[errorType], [
                 {
                     text: 'OK',
-                    onPress: () => console.log('Error acknowledged')
+                    onPress: () => {
+                        console.log('Error acknowledged');
+                        setHasError(false);
+                    }
                 }
             ]);
         }
@@ -128,7 +153,7 @@ const Gate = ({ route }) => {
 
     useEffect(() => {
         const interval = setInterval(() => {
-            if (geoSwitchOn && isConnect) {
+            if (!permissions.geolocation || (isConnect && geoSwitchOn)) {
                 console.log('Checking Location', lat, lon);
                 if (lat === '0' && lon === '0') {
                     Alert.alert('Error', 'Location not set, ask Admin to set location');
@@ -144,7 +169,7 @@ const Gate = ({ route }) => {
         }, 2000);
 
         return () => clearInterval(interval);
-    }, [geoSwitchOn, isConnect, lat, lon]);
+    }, [permissions.geolocation, isConnect, lat, lon]);
 
     useEffect(() => {
         connectToMQTT();
@@ -153,7 +178,6 @@ const Gate = ({ route }) => {
             console.log('Message Arrived: ', message.payloadString);
             let gateStatus = message.payloadString;
     
-            // Check for sensor errors first
             const sensorErrors = [
                 'pr-close1', 'pr-close2', 'pr-open1', 'pr-open2',
                 'retro-error', 'Electricity-off', 'overcurrent'
@@ -161,20 +185,28 @@ const Gate = ({ route }) => {
             
             if (sensorErrors.includes(gateStatus)) {
                 handleSensorError(gateStatus);
-                return;
             }
     
-            // Handle normal gate operations
-            if (gateStatus === 'opened') {
+            if (gateStatus === 'feedback-open' && !alertShown) {
                 console.log('Gate is Opened');
                 setOpen(true);
                 client.post(`/gate/${gate_id}`, { status: '2' });
                 setGateStatusUpdated(true);
+                setAlertShown(true);
             }
-            if (gateStatus === 'closed') {
+            else if (gateStatus === 'feedback-partial' && !partialAlertShown) {
+                console.log('Gate is Partially Opened');
+                setOpen(true);
+                client.post(`/gate/${gate_id}`, { status: '2' });
+                Alert.alert('Success', 'Gate Partially Opened');
+                setPartialAlertShown(true);
+            }
+            else if (gateStatus === 'closed') {
                 console.log('Gate is Closed');
                 setOpen(false);
                 client.post(`/gate/${gate_id}`, { status: '1' });
+                setAlertShown(false);
+                setPartialAlertShown(false);
             }
             if (gateStatus === 'locked') {
                 console.log('Gate is being Locked');
@@ -220,6 +252,10 @@ const Gate = ({ route }) => {
     }, [gateStatusUpdated]);
 
     const PartialopenGate = () => {
+        console.log('Partial Open Triggered');
+        console.log('Gate State:', open);
+        console.log('DND State:', Locked);
+        console.log('Reach State:', reach);
         if (isConnect) {
             const message = new Paho.Message('partial_open');
             message.destinationName = `gate/${body}`;
@@ -230,6 +266,10 @@ const Gate = ({ route }) => {
     };
     
     const FullopenGate = () => {
+        console.log('Full Open Triggered');
+        console.log('Gate State:', open);
+        console.log('DND State:', Locked);
+        console.log('Reach State:', reach);
         if (isConnect) {
             const message = new Paho.Message('full_open');
             message.destinationName = `gate/${body}`;
@@ -240,6 +280,7 @@ const Gate = ({ route }) => {
     };
 
     const Lock = () => {
+        console.log('DND Toggle:', !Locked);
         if (isConnect) {
             if (!Locked) {
                 const message = new Paho.Message('lock');
@@ -255,7 +296,11 @@ const Gate = ({ route }) => {
         }
     };
 
-    const onToggle = async () => {
+    const onToggle = () => {
+        console.log('Toggle Triggered');
+        console.log('Current Gate State:', open);
+        console.log('DND State:', Locked);
+        console.log('Reach State:', reach);
         if (isConnect) {
             const message = new Paho.Message('keep_open');
             message.destinationName = `gate/${body}`;
@@ -291,30 +336,79 @@ const Gate = ({ route }) => {
         isReachable();
     }, [isConnect, geoSwitchOn, InRange, Locked]);
 
+    useEffect(() => {
+        console.log('Permission State:', permissions);
+        console.log('Gate Open State:', open);
+        console.log('DND State:', Locked);
+        console.log('Reach State:', reach);
+    }, [permissions, open, Locked, reach]);
+
     return (   
         <View style={styles.container}>
             <Text style={styles.text}>Gate: {body}</Text>
             
-            <Button mode={status} onPress={() => Lock()} style={styles.button} labelStyle={styles.buttonText}>
-                {Locked === true ? 'DND on' : 'DnD off'}
-            </Button>
-            <Button mode="contained" onPress={PartialopenGate} style={styles.button} labelStyle={styles.buttonText} disabled={!reach}>
+            {/* 1. DND button if permitted */}
+            {permissions?.dnd && (
+                <Button mode={status} onPress={() => Lock()} style={styles.button} labelStyle={styles.buttonText}>
+                    {Locked === true ? 'DND on' : 'DnD off'}
+                </Button>
+            )}
+
+            {/* 2. Partial Open - Always show */}
+            <Button 
+                mode="contained" 
+                onPress={PartialopenGate} 
+                style={styles.button} 
+                labelStyle={styles.buttonText} 
+                disabled={!reach || Locked || open}
+            >
                 Partial Open
             </Button>
-            {permission === "Give Permission" && (
-                <>
-                    <Button mode="contained" onPress={FullopenGate} style={styles.button} labelStyle={styles.buttonText} disabled={!reach}>
-                        Full Open
-                    </Button>
-                    <Button mode={status} onPress={onToggle} style={styles.ToggleButton} labelStyle={styles.TbuttonText} disabled={!reach}>
-                        {!open ? 'Keep Open' : 'Close Gate'}
-                    </Button>
-                </>
+
+            {/* 3. Full Open button if permitted */}
+            {permissions?.fullOpen && (
+                <Button 
+                    mode="contained" 
+                    onPress={FullopenGate} 
+                    style={styles.button} 
+                    labelStyle={styles.buttonText} 
+                    disabled={!reach || Locked || open}
+                >
+                    Full Open
+                </Button>
             )}
-            <Snackbar
-                visible={true}
-                onDismiss={() => {}}
-            >
+
+            {/* 4. Keep Open if permitted, Close Gate always shows */}
+            {!open && permissions?.keepOpen ? (
+                <Button 
+                    mode={status} 
+                    onPress={onToggle} 
+                    style={styles.ToggleButton} 
+                    labelStyle={styles.TbuttonText} 
+                    disabled={!reach || Locked}
+                >
+                    Keep Open
+                </Button>
+            ) : (
+                // Always show Close Gate button
+                <Button 
+                    mode={status} 
+                    onPress={onToggle} 
+                    style={[
+                        styles.ToggleButton,
+                        !open && styles.disabledButton
+                    ]} 
+                    labelStyle={[
+                        styles.TbuttonText,
+                        !open && styles.disabledButtonText
+                    ]}
+                    disabled={!open || !reach || Locked}
+                >
+                    Close Gate
+                </Button>
+            )}
+
+            <Snackbar visible={true} onDismiss={() => {}}>
                 {mreach ? message : "MQTT Disconnected"}
             </Snackbar>
         </View>
@@ -373,7 +467,14 @@ const styles = StyleSheet.create({
         alignContent: 'center',
         justifyContent: 'center',
         borderRadius: 27,
-    }
+    },
+    disabledButton: {
+        opacity: 0.6,
+        backgroundColor: '#f5f5f5',
+    },
+    disabledButtonText: {
+        color: '#666666',
+    },
 });
 
 export default Gate;
