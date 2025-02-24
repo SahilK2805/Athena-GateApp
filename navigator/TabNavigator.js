@@ -12,7 +12,13 @@ export default function BottomTabNavigator() {
   
   return (
     <Tab.Navigator
-      screenOptions={{headerShown: false, }}
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: {
+          paddingBottom: 5,
+          height: 60,
+        },
+      }}
       tabBar={({ navigation, state, descriptors, insets }) => (
         <BottomNavigation.Bar
          navigationState={state}
