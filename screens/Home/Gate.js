@@ -224,6 +224,12 @@ const Gate = ({ route }) => {
                 'retro-error', 'Electricity-off', 'overcurrent'
             ];
             
+            // Add handling for retro_ok message
+            if (gateStatus === 'retro_ok') {
+                clearSensorError('retro-error');
+                return;
+            }
+            
             if (sensorErrors.includes(gateStatus)) {
                 handleSensorError(gateStatus);
             }

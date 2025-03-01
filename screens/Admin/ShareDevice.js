@@ -66,23 +66,44 @@ const onShare = async (link) => {
     }
   };
 
-const GenerateLink = () => {
+
+
+const shortenUrl = async (longUrl) => {
+  try {
+      const modifiedUrl = longUrl + "?ref=Athena-Automation"; // Append identifier
+      const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(modifiedUrl)}`);
+      if (!response.ok) throw new Error('URL shortening failed');
+      return await response.text();
+  } catch (error) {
+      console.error('Error shortening URL:', error);
+      return longUrl;
+  }
+};
+
+
+const GenerateLink = async () => {
     getGates();
     console.log('Generating link...');
-    // console.log('Selected:', selected);
-    client.post('/share/token',{
-        sub:selected,
-    }).then((response) => {
+    
+    try {
+        const response = await client.post('/share/token', {
+            sub: selected,
+        });
+        
         if (response.status === 200) {
-            // const link = `http://192.168.28.93:3055/api/v1/share/${response.data.token}`;
-            const link = `http://${address}/api/v1/share/${response.data.token}`; //my
-            console.log('Link:', link);
-            onShare(link);
+            const longLink = `http://${address}/api/v1/share/${response.data.token}`;
+            // Get shortened URL
+            const shortLink = await shortenUrl(longLink);
+            console.log('Shortened Link:', shortLink);
+            
+            // Create a message with the shortened link
+            const message = `Here's your gate access link: ${shortLink}`;
+            onShare(message);
         }
-    }).catch((error) => {
-        Alert.alert('Error:unable to share device', error.message);
+    } catch (error) {
+        Alert.alert('Error: unable to share device', error.message);
         console.log('Error:', error);
-    });
+    }
 };
 
     return (
